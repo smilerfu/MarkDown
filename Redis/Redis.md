@@ -1153,6 +1153,308 @@ OK
 
 #### ZSet
 
+Redis中的ZSet是有序的集合。每个元素都会关联一个double类型的分数，Redis通过这个分数来进行排序。当分数一样时，Redis默认使用字典序排序。
+
+##### zadd key score member [score member...]
+
+  向有序集合中添加一个或多个成员，或者更新已经存在的成员的分数
+
+```bash
+127.0.0.1:6379> zadd zset 1 name1 2 name2
+(integer) 2
+```
+
+##### zscore key member
+
+  返回有序集合中成员的分数
+
+```bash
+127.0.0.1:6379> zadd zset 3 name2
+(integer) 0
+127.0.0.1:6379> zscore zset name2
+"3"
+```
+
+##### zcard key
+
+  返回有序集合的成员数量
+
+```bash
+127.0.0.1:6379> zcard zset
+(integer) 2
+```
+
+##### zrange key start stop
+
+  通过索引区间[start, stop]返回有序集合中的成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+127.0.0.1:6379> zrange zset 0 0
+1) "name1"
+```
+
+##### zcount key min max
+
+  返回分数在[min, max]之间的成员个数
+
+```bash
+127.0.0.1:6379> zcount zset 10 20
+(integer) 0
+127.0.0.1:6379> zcount zset 0 10
+(integer) 2
+```
+
+##### zrank key member
+
+  返回有序集合中指定成员的索引
+
+```bash
+127.0.0.1:6379> zrank zset name1
+(integer) 0
+127.0.0.1:6379> zrank zset name2
+(integer) 1
+```
+
+##### zrem key member [member...]
+
+  移除有序集合中一个或多个成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+127.0.0.1:6379> zrem zset name2
+(integer) 1
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+```
+
+##### zlexcount key min max
+
+  计算有序集合中得分在指定的区间min和max内的成员数量
+
+  min，max为
+
+- [
+
+  - [min
+
+    结果中包含min的值
+
+  - [max
+
+    结果中包含max的值
+
+- (
+
+  - (min
+
+    结果中不包含min的值
+
+  - (max
+
+    结果中不包含max的值
+
+- -
+
+  得分最小的成员
+
+- +
+
+  得分最大的成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+3) "name3"
+4) "name4"
+127.0.0.1:6379> zlexcount zset [name1 [name3  # 得分在[name1, name3]之间的成员
+(integer) 3
+127.0.0.1:6379> zlexcount zset [name1 (name3  # 得分在[name1, name3)之间的成员
+(integer) 2
+127.0.0.1:6379> zlexcount zset - +            # 得分在[最小分，最大分]之间的成员
+(integer) 4
+127.0.0.1:6379> zlexcount zset - [name3       # 得分在[最小分，name3]之间的成员
+(integer) 3
+```
+
+##### zrangebylex key min max
+
+  返回有序集合中得分在指定的区间min和max内的成员
+
+  ```bash
+127.0.0.1:6379> zrangebylex zset (name2 [name4
+1) "name3"
+2) "name4"
+127.0.0.1:6379> zrangebylex zset (name2 +
+1) "name3"
+2) "name4"
+  ```
+
+##### zrangebyscore key min max
+
+  返回有序集合中分数在[min, max]之间的成员
+
+```bash
+127.0.0.1:6379> zrangebyscore zset 2 4
+1) "name2"
+2) "name3"
+3) "name4"
+127.0.0.1:6379> zrangebyscore zset 0 -1
+(empty array)
+```
+
+##### zrevrange key start stop
+
+  返回有序集合中，按分数从大到小排序下，索引在[start, stop]中的元素
+
+```bash
+127.0.0.1:6379> zrevrange zset 0 -1
+1) "name4"
+2) "name3"
+3) "name2"
+4) "name1"
+127.0.0.1:6379> zrevrange zset 0 2
+1) "name4"
+2) "name3"
+3) "name2"
+```
+
+##### zrevrank key member
+
+  返回有序集合中，按分数从大到小排序下，成员的排名
+
+```bash
+127.0.0.1:6379> zrevrank zset name3
+(integer) 1
+127.0.0.1:6379> zrevrank zset name1
+(integer) 3
+```
+
+##### zrevrangebyscore key max min
+
+  返回有序集合中，按分数从大到小排序下，分数在[max, min]之间的成员
+
+```bash
+127.0.0.1:6379> zrevrangebyscore zset 3 0
+1) "name3"
+2) "name2"
+3) "name1"
+```
+
+##### zincrby key increment member
+
+  在有序集合中对指定的成员的分数增加一个增量
+
+```bash
+127.0.0.1:6379> zincrby zset 10 name2
+"12"
+127.0.0.1:6379> zincrby zset -10 name2
+"2"
+```
+
+##### zinterstore destination numkeys key [key ...]
+
+   将有序集合中的交集存储在destination集合中，分数相加
+
+```bash
+127.0.0.1:6379> zadd zset12 1 name1 2 name2
+(integer) 2
+127.0.0.1:6379> zadd zset13 1 name1 3 name3
+(integer) 2
+127.0.0.1:6379> zinterstore zsetinter 2 zset12 zset13
+(integer) 1
+127.0.0.1:6379> zscore zsetinter name1
+"2"
+127.0.0.1:6379> zadd zset4 4 name1
+(integer) 1
+127.0.0.1:6379> zinterstore zsetinter 2 zset12 zset4
+(integer) 1
+127.0.0.1:6379> zrange zsetinter 0 -1
+1) "name1"
+127.0.0.1:6379> zscore zsetinter name1
+"5"
+```
+
+##### zunionstore destination numkeys key [key...]
+
+  将有序集合中的并集存储在destination集合中，分数相加
+
+```bash
+127.0.0.1:6379> zunionstore zsetunion 2 zset12 zset13
+(integer) 3
+127.0.0.1:6379> zrange zsetunion 0 -1
+1) "name1"
+2) "name2"
+3) "name3"
+127.0.0.1:6379> zscore zsetunion name3
+"3"
+127.0.0.1:6379> zscore zsetunion name2
+"2"
+127.0.0.1:6379> zscore zsetunion name1
+"2"
+```
+
+##### zremrangebylex key min max
+
+  移除有序集合中得分在指定的区间min和max内的成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+3) "name3"
+4) "name4"
+127.0.0.1:6379> zremrangebylex zset - [name1
+(integer) 1
+127.0.0.1:6379> zrange zset 0 -1
+1) "name2"
+2) "name3"
+3) "name4"
+```
+
+##### zremrangebyrank key start stop
+
+  移除有序集合中索引在[start, stop]之间的成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+3) "name3"
+4) "name4"
+127.0.0.1:6379> zremrangebyrank zset 1 2
+(integer) 2
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name4"
+```
+
+##### zremrangebyscore key min max
+
+  移除有序集合中得分在[min, max]之间的成员
+
+```bash
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name2"
+3) "name3"
+4) "name4"
+127.0.0.1:6379> zremrangebyscore zset 2 3
+(integer) 2
+127.0.0.1:6379> zrange zset 0 -1
+1) "name1"
+2) "name4"
+```
+
+##### zscan key cursor [MATCH pattern] [COUNT count]
+
+  迭代有序集合中的元素
+
 ### 三种特殊的数据类型
 
 #### geospatial
