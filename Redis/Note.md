@@ -8,6 +8,8 @@ remote dictionary server
 - 支持事务
 - 支持持久化
 - 可扩展性
+- 发布/订阅
+- 哨兵模式
 - ...
 
 ### 基础知识
@@ -25,6 +27,7 @@ remote dictionary server
 `redis-cli -h 127.0.0.1 -p 6379 -a ******`
 
 ```bash
+127.0.0.1:6379>
 127.0.0.1:6379> ping
 PONG
 127.0.0.1:6379> select 1  # 切换到1号数据库
@@ -197,14 +200,16 @@ typedef char *sds;
 ```c
 // Redis3.0
 struct sdshdr {
-    // buf 中已占用空间的长度
-    int len;
-    // buf 中剩余可用空间的长度
-    int free;
-    // 数据空间
-    char buf[];
+    
+    int len;  // buf 中已占用空间的长度
+    
+    int free;  // buf 中剩余可用空间的长度
+   
+    char buf[];  // 数据空间
 };
 ```
+
+![string-sds-sample](Note.assets/string-sds-sample.png)
 
 ![](Note.assets/string-sdshdr.png)
 
@@ -261,9 +266,9 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 - ```char buf[]```柔性数组
 - sds指向的是buf数组地址，而非header的地址
 
-![sdshdr5](Note.assets/string-sdshdr5.png)
+![sdshdr5](Note.assets/string-sdshdr8.png)
 
-![sdshdr8](Note.assets/string-sdshdr8.png)
+![sdshdr8](Note.assets/string-sdshdr5.png)
 
 ```c
 // Redis6.0
@@ -289,7 +294,76 @@ static inline size_t sdslen(const sds s) {
 }
 ```
 
+```c
+// Redis6.0
+sds _sdsnewlen(const void *init, size_t initlen, int trymalloc) {
+    void *sh;
+    sds s;
+    char type = sdsReqType(initlen);
+    /* Empty strings are usually created in order to append. Use type 8
+     * since type 5 is not good at this. */
+    if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
+    int hdrlen = sdsHdrSize(type);
+    unsigned char *fp; /* flags pointer. */
+    size_t usable;
+
+    assert(initlen + hdrlen + 1 > initlen); /* Catch size_t overflow */
+    sh = trymalloc?
+        s_trymalloc_usable(hdrlen+initlen+1, &usable) :
+        s_malloc_usable(hdrlen+initlen+1, &usable);
+    if (sh == NULL) return NULL;
+    if (init==SDS_NOINIT)
+        init = NULL;
+    else if (!init)
+        memset(sh, 0, hdrlen+initlen+1);
+    s = (char*)sh+hdrlen;
+    fp = ((unsigned char*)s)-1;
+    usable = usable-hdrlen-1;
+    if (usable > sdsTypeMaxSize(type))
+        usable = sdsTypeMaxSize(type);
+    switch(type) {
+        case SDS_TYPE_5: {
+            *fp = type | (initlen << SDS_TYPE_BITS);
+            break;
+        }
+        case SDS_TYPE_8: {
+            SDS_HDR_VAR(8,s);
+            sh->len = initlen;
+            sh->alloc = usable;
+            *fp = type;
+            break;
+        }
+        case SDS_TYPE_16: {
+            SDS_HDR_VAR(16,s);
+            sh->len = initlen;
+            sh->alloc = usable;
+            *fp = type;
+            break;
+        }
+        case SDS_TYPE_32: {
+            SDS_HDR_VAR(32,s);
+            sh->len = initlen;
+            sh->alloc = usable;
+            *fp = type;
+            break;
+        }
+        case SDS_TYPE_64: {
+            SDS_HDR_VAR(64,s);
+            sh->len = initlen;
+            sh->alloc = usable;
+            *fp = type;
+            break;
+        }
+    }
+    if (initlen && init)
+        memcpy(s, init, initlen);
+    s[initlen] = '\0';
+    return s;
+}
+```
+
 字符串长度限制，默认512M
+
 ```c
 // Redis6.0
 static int checkStringLength(client *c, long long size) {
@@ -465,9 +539,12 @@ static int checkStringLength(client *c, long long size) {
 
 **5）兼容部分C函数**
 
+- strcasecmp、strcat
 
+#### redisDb
 
 ```c
+// Redis6.0
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
     dict *expires;              /* Timeout of keys with a timeout set */
@@ -479,7 +556,9 @@ typedef struct redisDb {
     unsigned long expires_cursor; /* Cursor of the active expire cycle. */
     list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
-
+```
+```c
+// Redis6.0
 typedef struct dict {
     dictType *type;
     void *privdata;
@@ -487,14 +566,18 @@ typedef struct dict {
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
-
+```
+```c
+// Redis6.0
 typedef struct dictht {
     dictEntry **table;
     unsigned long size;
     unsigned long sizemask;
     unsigned long used;
 } dictht;
-
+```
+```c
+// Redis6.0
 typedef struct dictEntry {
     void *key;
     union {
@@ -505,7 +588,9 @@ typedef struct dictEntry {
     } v;
     struct dictEntry *next;
 } dictEntry;
-
+```
+```c
+// Redis6.0
 typedef struct redisObject {
     unsigned type:4;
     unsigned encoding:4;
@@ -516,3 +601,5 @@ typedef struct redisObject {
     void *ptr;
 } robj;
 ```
+
+![string-redisDb](Note.assets/string-redisDb.png)
